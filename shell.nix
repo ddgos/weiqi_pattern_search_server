@@ -3,7 +3,7 @@ let
 	pkgs = import (fetchTarball("https://github.com/NixOS/nixpkgs/archive/nixos-24.05.tar.gz")) {};
 in pkgs.mkShell { 
 	name = "rust-shell";
-	packages = with pkgs; [ rustup openssl ];
+	packages = with pkgs; [ rustup openssl sqlite ];
 	shellHook = ''
 		rustup toolchain install stable
 		rustup component add rust-analyzer
