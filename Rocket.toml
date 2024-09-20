@@ -1,0 +1,2 @@
+[default.databases.patterns]
+url = "/home/danielg/workspace/weiqi_pattern_search_server/dbs/patterns.sqlite"
