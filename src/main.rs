@@ -3,17 +3,11 @@ extern crate rocket;
 
 use std::{collections::HashMap, fmt::Display};
 
-use rocket::fairing::{self, AdHoc};
-use rocket::futures::StreamExt;
 use rocket::request::FromParam;
-use rocket::response::status::Created;
-use rocket::serde::{json::Json, Deserialize, Serialize};
-use rocket::{futures, Build, Rocket};
+use rocket::serde::{json::Json, Serialize};
 
 use rocket_db_pools::sqlx::Row;
 use rocket_db_pools::{sqlx, Connection, Database};
-
-use futures::{future::TryFutureExt, stream::TryStreamExt};
 
 use weiqi_pattern::{Pattern, PatternParseError};
 
@@ -30,7 +24,7 @@ impl PatternWrapper {
         &self.0
     }
 
-    fn to_inner(self) -> Pattern {
+    fn into_inner(self) -> Pattern {
         self.0
     }
 }
@@ -117,7 +111,7 @@ async fn api_v1_search(
         Some((lec_id, pat))
     });
 
-    let costed_lecs = sort_patterns(pattern.to_inner(), patterns);
+    let costed_lecs = sort_patterns(pattern.into_inner(), patterns);
 
     Some(Json(costed_lecs))
 }
