@@ -1,9 +1,10 @@
 #[macro_use]
 extern crate rocket;
 
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use rocket::fairing::{self, AdHoc};
+use rocket::futures::StreamExt;
 use rocket::request::FromParam;
 use rocket::response::status::Created;
 use rocket::serde::{json::Json, Deserialize, Serialize};
@@ -79,30 +80,97 @@ fn api_v1_index() -> &'static str {
 }
 
 #[get("/api/v1/search/<pattern>")]
-async fn api_v1_search(mut db: Connection<Db>, pattern: PatternWrapper) -> Option<String> {
-    format!(
-        "
-            you requested a search with pattern {}
-            returning results is not yet supported
-        ",
-        pattern
-    );
-    let lec_ids = sqlx::query("SELECT (lec_id, pat) FROM patterns")
-        .fetch(&mut **db)
-        .map_ok(|record| {
-            let lec_id: i64 = record.try_get(0).unwrap();
-            let pat_str: String = record.try_get(1).unwrap();
-            let pat: Pattern = pat_str.parse().unwrap();
-
-            (lec_id, pat)
-        })
-        .try_collect::<Vec<_>>()
+async fn api_v1_search(
+    mut db: Connection<Db>,
+    pattern: PatternWrapper,
+) -> Option<Json<Vec<CostedResource>>> {
+    let db_result = sqlx::query("SELECT lec_id, pat FROM patterns")
+        .fetch_all(&mut **db)
         .await;
+    let db_rows = match db_result {
+        Ok(rows) => rows,
+        Err(e) => {
+            eprintln!("failed to fetch db results as {}", e);
+            return None;
+        }
+    };
 
-    Some(format!("{:?}", lec_ids))
+    let patterns = db_rows.into_iter().filter_map(|record| {
+        let lec_id_get_result: Result<i64, _> = record.try_get(0);
+        let lec_id = match lec_id_get_result {
+            Ok(id) => id,
+            Err(e) => {
+                eprintln!("failed to get lec_id as {}", e);
+                return None;
+            }
+        };
+        let pat_str_get_result: Result<String, _> = record.try_get(1);
+        let pat_str = match pat_str_get_result {
+            Ok(str) => str,
+            Err(e) => {
+                eprintln!("failed to get pat as {}", e);
+                return None;
+            }
+        };
+        let pat: Pattern = pat_str.parse().ok()?;
+
+        Some((lec_id, pat))
+    });
+
+    let costed_lecs = sort_patterns(pattern.to_inner(), patterns);
+
+    Some(Json(costed_lecs))
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+struct CostedResource {
+    lecture_id: i64,
+    match_cost: u64,
+}
+
+fn sort_patterns(
+    needle: Pattern,
+    patterns: impl Iterator<Item = (i64, Pattern)>,
+) -> Vec<CostedResource> {
+    let mut resource_best_costs = HashMap::<i64, u64>::new();
+    let id_costs = patterns.filter_map(|(id, pat)| {
+        needle
+            .minimum_positioned_variation_match_cost(&pat)
+            .map(|(_, _, cost)| (id, cost))
+    });
+    for (resource_id, cost) in id_costs {
+        let maybe_to_insert = match resource_best_costs.get(&resource_id) {
+            Some(best_yet_cost) => {
+                if cost < *best_yet_cost {
+                    Some(cost)
+                } else {
+                    None
+                }
+            }
+            None => Some(cost),
+        };
+
+        if let Some(to_insert) = maybe_to_insert {
+            resource_best_costs.insert(resource_id, to_insert);
+        }
+    }
+
+    let mut resource_best_costs: Vec<_> = resource_best_costs
+        .into_iter()
+        .map(|(lecture_id, match_cost)| CostedResource {
+            lecture_id,
+            match_cost,
+        })
+        .collect();
+    resource_best_costs.sort_unstable_by_key(|CostedResource { match_cost, .. }| *match_cost);
+
+    resource_best_costs
 }
 
 #[launch]
 fn rocket() -> _ {
-    rocket::build().mount("/", routes![index, api_index, api_v1_index, api_v1_search])
+    rocket::build()
+        .attach(Db::init())
+        .mount("/", routes![index, api_index, api_v1_index, api_v1_search])
 }
