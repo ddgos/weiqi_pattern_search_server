@@ -69,7 +69,13 @@ fn api_v1_index() -> &'static str {
         endpoints available for this api:
          - search/<pattern>
            where <pattern> is a pattern as defined by
-           https://github.com/ddgos/weiqi_pattern
+           https://github.com/ddgos/weiqi_pattern.
+           this will return a JSON formatted list of objects with fields
+             lecture_id int
+               the IGS lecture ID
+             match_cost int
+               the minimum match cost of patterns in lecture <lecture_id> and
+               <pattern>
     "
 }
 
