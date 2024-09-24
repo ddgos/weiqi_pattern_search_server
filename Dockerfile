@@ -1,4 +1,4 @@
-FROM docket.io/rust:1-slim-bookwork AS build
+FROM docket.io/rust:1-slim-bookworm AS build
 
 ARG pkg=weiqi_pattern_search_server
 
@@ -15,7 +15,7 @@ RUN --mount=type=cache,target=/build/targer \
 
 
 
-FROM docket.io/debian:bookwork-slim
+FROM docket.io/debian:bookworm-slim
 
 WORKDIR /app
 
